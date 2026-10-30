@@ -217,6 +217,22 @@ internal static class CoopMenu
             }
         }
 
+        GUILayout.Label("DISCORD", UiTheme.Section);
+        GUILayout.BeginHorizontal();
+        GUILayout.Label(DiscordPresence.Enabled
+            ? $"Status shown · {UiTheme.Colored(DiscordPresence.Status, UiTheme.Muted)}"
+            : UiTheme.Colored("Status hidden", UiTheme.Muted), UiTheme.Label);
+        GUILayout.FlexibleSpace();
+        if (GUILayout.Button(DiscordPresence.Enabled ? "Turn off" : "Turn on", UiTheme.ButtonGhost, GUILayout.Width(110f)))
+        {
+            DiscordPresence.SetEnabled(!DiscordPresence.Enabled);
+            if (Plugin.DiscordSetting != null)
+            {
+                Plugin.DiscordSetting.Value = DiscordPresence.Enabled;
+            }
+        }
+        GUILayout.EndHorizontal();
+
         GUILayout.Space(8f);
         GUILayout.Label("T  Chat      F8 / Esc  close", UiTheme.Small);
         GUILayout.EndVertical();

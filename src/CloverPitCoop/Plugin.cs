@@ -13,10 +13,11 @@ public class Plugin : BaseUnityPlugin
 {
     public const string Guid = "coop-anything.cloverpit-coop";
     public const string Name = "CloverPit Co-op";
-    public const string Version = "0.4.0";
+    public const string Version = "0.5.0";
 
     internal static ManualLogSource Log;
     internal static Plugin Instance;
+    internal static BepInEx.Configuration.ConfigEntry<bool> DiscordSetting;
 
     private void Awake()
     {
@@ -26,6 +27,15 @@ public class Plugin : BaseUnityPlugin
 
         new Harmony(Guid).PatchAll(typeof(Plugin).Assembly);
         Log.LogInfo("[coop] Harmony patches applied");
+
+        // Discord status (coins, tickets, deadline); on by default, switchable in the F8 menu.
+        DiscordSetting = Config.Bind("Discord", "RichPresence", true,
+            "Show coins, clover tickets and the deadline as your Discord status.");
+        Net.DiscordPresence.Enabled = DiscordSetting.Value;
+        if (!HasArg("--coop-dettest") && !HasArg("--coop-join") && !HasArg("--coop-join-steam") || HasArg("--coop-discordtest"))
+        {
+            Net.DiscordPresence.Start();
+        }
 
         if (ArgValue("--coop-host") is string hostPort)
         {
@@ -93,11 +103,18 @@ public class Plugin : BaseUnityPlugin
         Net.Avatars.Tick();
         Net.Spectate.Tick();
         Net.ClientTest.Tick();
+        Net.DiscordPresence.Tick();
     }
 
     private void OnDestroy()
     {
         Net.Coop.Link?.Dispose();
+        Net.DiscordPresence.Stop();
+    }
+
+    private void OnApplicationQuit()
+    {
+        Net.DiscordPresence.Stop();
     }
 
     private void OnGUI()

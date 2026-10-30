@@ -22,6 +22,7 @@ CloverMP is an independent fan project. It is not affiliated with or endorsed by
 - **Players** shown as simple colored figures with their Steam name.
 - **Chat** on `T`, with a quiet sound for messages from others.
 - **Co-op menu** on `F8`.
+- **Discord Rich Presence**: your Discord status shows coins, clover tickets, the deadline (deposited / debt, rounds left) and, in co-op, the group size. Talks to the local Discord app directly, no extra DLL. Can be turned off in the `F8` menu.
 - **Only the host saves.**
 
 ## Install
@@ -40,6 +41,7 @@ Every player needs CloverPit on Steam and the same mod version.
 - Friends: start the game, wait until you stand in the room, then accept the invite in Steam.
 - `T`: chat. `F8` / `Esc`: close the menu.
 - **Leave co-op** returns you to your own save.
+- Discord status: on by default; switch it in the `F8` menu (stored in `BepInEx\config\coop-anything.cloverpit-coop.cfg`).
 - Everyone should either own the DLC or not; the mod warns when it is mixed.
 
 ## How it works

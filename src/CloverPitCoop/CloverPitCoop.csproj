@@ -6,7 +6,7 @@
     <RootNamespace>CloverPitCoop</RootNamespace>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <!-- Game folder (with BepInEx installed) to compile against. Override with -p:GameDir=...
