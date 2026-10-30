@@ -1,0 +1,10 @@
+bin/
+obj/
+*.user
+.vs/
+# Local test data: game copies, saves, decompiled game code, logs, screenshots
+local/
+test-installs/
+release/
+*.png
+*.log
