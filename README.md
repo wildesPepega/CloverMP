@@ -25,7 +25,8 @@ CloverMP is an independent fan project. It is not affiliated with or endorsed by
 - **New run / death**: the host's new run is sent to everyone automatically.
 - **Players** shown as simple colored figures with their Steam name.
 - **Chat** on `T`, with a soft pop for messages from others (your own sound: a 16 bit PCM `chat.wav` next to the DLL) and a typing bubble above the name.
-- **Co-op menu** on `F8`.
+- **Co-op menu** on `F8`: movable, with switches for the settings.
+- **Player list**: hold `Tab` to see everyone with their ping.
 - **Discord Rich Presence**: your Discord status shows coins, clover tickets, the deadline (deposited / debt, rounds left) and, in co-op, the group size. Talks to the local Discord app directly, no extra DLL. Can be turned off in the `F8` menu.
 - **Only the host saves.**
 - **Automatic updates**: see below.
@@ -42,10 +43,10 @@ Every player needs CloverPit on Steam and the same mod version.
 
 ## Play
 
-- `F8`: co-op menu (available once you stand in the room). Host: **Host co-op**, then invite friends through the Steam overlay.
+- `F8`: co-op menu (available once you stand in the room). Host: **Host a session**, then invite friends through the Steam overlay.
 - Friends: start the game, wait until you stand in the room, then accept the invite in Steam.
-- `T`: chat. `F8` / `Esc`: close the menu.
-- **Leave co-op** ends the session. A friend returns to the main menu with their own save; the host keeps playing alone.
+- `T`: chat. `F8` / `Esc`: close the menu. Hold `Tab`: player list.
+- **Leave session** ends the session. A friend returns to the main menu with their own save; the host keeps playing alone.
 - **Main menu** (click twice) goes to the title screen. As the host this ends the session for everyone. It saves in the room, not during a round, like the game's own pause menu.
 - Discord status: on by default; switch it in the `F8` menu (stored in `BepInEx\config\coop-anything.cloverpit-coop.cfg`).
 - Everyone should either own the DLC or not; the mod warns when it is mixed.

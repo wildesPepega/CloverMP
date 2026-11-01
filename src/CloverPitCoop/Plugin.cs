@@ -13,7 +13,7 @@ public class Plugin : BaseUnityPlugin
 {
     public const string Guid = "coop-anything.cloverpit-coop";
     public const string Name = "CloverPit Co-op";
-    public const string Version = "0.7.7";
+    public const string Version = "0.7.8";
 
     internal static ManualLogSource Log;
     internal static Plugin Instance;
@@ -142,9 +142,12 @@ public class Plugin : BaseUnityPlugin
 
     private void OnGUI()
     {
-        Net.CoopMenu.OnGUI();
-        Net.Social.OnGUI();
-        Net.Spectate.OnGUI();
+        // One broken screen must not take the others down with it, or leave the game's input blocked.
+        SafeGui(Net.CoopMenu.OnGUI);
+        SafeGui(Net.TabList.OnGUI);
+        SafeGui(Net.Social.OnGUI);
+        SafeGui(Net.Spectate.OnGUI);
+        GUI.color = Color.white;
         if (Net.Coop.Toast == null || Time.unscaledTime > Net.Coop.ToastUntil)
         {
             return;
@@ -152,8 +155,33 @@ public class Plugin : BaseUnityPlugin
         Net.UiTheme.Ensure();
         float left = Net.Coop.ToastUntil - Time.unscaledTime;
         GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01(left / 0.4f));
-        GUI.Box(new Rect(Screen.width / 2f - 280f, 36f, 560f, 52f), Net.UiTheme.Plain(Net.Coop.Toast), Net.UiTheme.Toast);
+        float w = Net.UiTheme.Px(560f);
+        GUI.Box(new Rect((Screen.width - w) / 2f, Net.UiTheme.Px(36f), w, Net.UiTheme.Px(52f)), Net.UiTheme.Plain(Net.Coop.Toast), Net.UiTheme.Toast);
         GUI.color = Color.white;
+    }
+
+    private string _lastGuiError;
+
+    private void SafeGui(Action screen)
+    {
+        try
+        {
+            screen();
+        }
+        catch (ExitGUIException)
+        {
+            throw;
+        }
+        catch (Exception e)
+        {
+            if (_lastGuiError != e.Message)
+            {
+                _lastGuiError = e.Message;
+                Log.LogError($"[coop] ui: {screen.Method.DeclaringType?.Name}: {e}");
+            }
+            GUI.color = Color.white;
+            GUI.enabled = true;
+        }
     }
 
     internal static bool HasArg(string name)

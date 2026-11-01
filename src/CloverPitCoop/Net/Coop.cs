@@ -31,6 +31,7 @@ internal enum Role { Off, Host, Client }
 //   RESUME|<lastSeq>                   client -> host, back after an interruption: send what came after
 //   MO|<player>                        host -> client, the machine changed hands outside an action
 //   SU|<player>                        host -> client, the same for the surgery machine
+//   PL|<player>,<player>               host -> client, who is in the session besides the host
 //   NS|<kind>|<dialogue>|<arg>         host -> client, your action fails and changes nothing
 //   P|<time>, PO|<time>, PR|<p>|<ms>   ping (may get lost): host asks, client echoes, host shares
 //   T|<name>|<data>                    test-only control messages between the bots
@@ -161,6 +162,7 @@ internal static class Coop
             {
                 Interrupted.Remove(back);
                 Greet(back);
+                SendRoster();
                 Show($"{Social.NameOf(back)} is back");
             }
             while (Link.TryJoined(out int joined))
@@ -175,6 +177,7 @@ internal static class Coop
                 Greet(joined);
                 Link.SendTo(joined, "MO|" + MachineOwner);
                 Link.SendTo(joined, "SU|" + SurgeryUser);
+                SendRoster();
             }
             while (Link.TryLeft(out int left))
             {
@@ -196,6 +199,7 @@ internal static class Coop
                     Link.Send("SU|" + NoOne);
                 }
                 JoinSync.AwaitingLoad.Remove(left);
+                SendRoster();
                 Show($"{Social.NameOf(left)} left the game");
             }
         }
@@ -303,11 +307,17 @@ internal static class Coop
     private static readonly Dictionary<int, float> PingSeen = new Dictionary<int, float>();
     private static float _nextPing;
 
-    public static string PingText(int player)
+    // -1: not known right now.
+    public static int PingMs(int player)
     {
         return Pings.TryGetValue(player, out int ms) && PingSeen.TryGetValue(player, out float seen) && Time.unscaledTime - seen < 5f
-            ? ms + " ms"
-            : null;
+            ? ms
+            : -1;
+    }
+
+    private static void SendRoster()
+    {
+        Link.Send("PL|" + string.Join(",", Players));
     }
 
     private static void HostPingTick()
@@ -624,6 +634,9 @@ internal static class Coop
                     LocalFreedom.LeaveSlotMenu();
                 }
                 MachineOwner = newOwner;
+                break;
+            case "PL" when Role == Role.Client:
+                Social.SetRoster(p.Length > 1 ? p[1] : "");
                 break;
             case "SU" when Role == Role.Client:
                 SurgeryUser = int.Parse(p[1]);

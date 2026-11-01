@@ -74,6 +74,7 @@ internal static class Social
         Avatars.Clear();
         GazeSeen.Clear();
         Typing.Clear();
+        Roster.Clear();
         _typing = false;
     }
 
@@ -247,9 +248,9 @@ internal static class Social
             // at a lower resolution than the window).
             float x = s.x / cam.pixelWidth * Screen.width;
             float y = Screen.height - s.y / cam.pixelHeight * Screen.height;
-            var r = new Rect(x - 120f, y - 30f, 240f, 26f);
+            var r = new Rect(x - UiTheme.Px(120f), y - UiTheme.Px(30f), UiTheme.Px(240f), UiTheme.Px(26f));
             GUI.color = new Color(0f, 0f, 0f, 0.8f);
-            GUI.Label(new Rect(r.x + 2f, r.y + 2f, r.width, r.height), NameOf(g.Key), _tag);
+            GUI.Label(new Rect(r.x + 1f, r.y + 1f, r.width, r.height), NameOf(g.Key), _tag);
             GUI.color = Avatars.ColorOf(g.Key);
             GUI.Label(r, NameOf(g.Key), _tag);
             GUI.color = Color.white;
@@ -260,30 +261,23 @@ internal static class Social
         }
     }
 
-    // Small black speech bubble with three dots lighting up in turn, standing on the name.
+    // Small rounded speech bubble with three dots lighting up in turn, standing on the name.
     private static void DrawTypingBubble(float centerX, float bottom)
     {
-        const float dot = 4f;
-        const float gap = 4f;
-        const float width = 3f * dot + 2f * gap + 16f;
-        const float height = 18f;
-        const float tail = 4f;
-        float top = bottom - tail - height;
-        Fill(new Rect(centerX - width / 2f, top, width, height), Color.black);
-        Fill(new Rect(centerX - 3f, top + height, 6f, tail), Color.black);
+        float dot = UiTheme.Px(6f);
+        float gap = UiTheme.Px(4f);
+        float width = 3f * dot + 2f * gap + UiTheme.Px(20f);
+        float height = UiTheme.Px(22f);
+        float top = bottom - height;
+        GUI.Box(new Rect(centerX - width / 2f, top, width, height), GUIContent.none, UiTheme.Toast);
         int active = (int)(Time.unscaledTime * 3f) % 3;
         for (int i = 0; i < 3; i++)
         {
             float dotX = centerX - (3f * dot + 2f * gap) / 2f + i * (dot + gap);
-            Fill(new Rect(dotX, top + (height - dot) / 2f, dot, dot), i == active ? UiTheme.Orange : UiTheme.Muted);
+            GUI.color = i == active ? UiTheme.Accent : UiTheme.Muted;
+            GUI.DrawTexture(new Rect(dotX, top + (height - dot) / 2f, dot, dot), UiTheme.Knob);
         }
         GUI.color = Color.white;
-    }
-
-    private static void Fill(Rect r, Color c)
-    {
-        GUI.color = c;
-        GUI.DrawTexture(r, Texture2D.whiteTexture);
     }
 
     // Chat box bottom left: recent lines fade out after a while; while typing the whole history
@@ -309,10 +303,10 @@ internal static class Social
             return;
         }
         UiTheme.Ensure();
-        const float width = 560f;
-        const float lineH = 24f;
-        float x = 24f;
-        float bottom = Screen.height - 24f - (_typing ? 46f : 0f);
+        float width = UiTheme.Px(560f);
+        float lineH = UiTheme.Px(24f);
+        float x = UiTheme.Px(34f);
+        float bottom = Screen.height - UiTheme.Px(24f) - (_typing ? UiTheme.Px(46f) : 0f);
 
         var visible = new List<(float alpha, string text, float height)>();
         float linesHeight = 0f;
@@ -330,7 +324,7 @@ internal static class Social
         }
         if (visible.Count > 0 || _typing)
         {
-            float h = Mathf.Max(lineH, linesHeight) + 16f;
+            float h = Mathf.Max(lineH, linesHeight) + UiTheme.Px(16f);
             float top = bottom - h;
             float panelAlpha = 0f;
             foreach ((float alpha, string _, float _) in visible)
@@ -338,8 +332,8 @@ internal static class Social
                 panelAlpha = Mathf.Max(panelAlpha, alpha);
             }
             GUI.color = new Color(1f, 1f, 1f, _typing ? 1f : panelAlpha);
-            GUI.Box(new Rect(x - 10f, top, width + 20f, h), GUIContent.none, UiTheme.PanelSoft);
-            float y = top + 8f;
+            GUI.Box(new Rect(x - UiTheme.Px(10f), top, width + UiTheme.Px(20f), h), GUIContent.none, UiTheme.PanelSoft);
+            float y = top + UiTheme.Px(8f);
             foreach ((float alpha, string text, float height) in visible)
             {
                 GUI.color = new Color(1f, 1f, 1f, alpha);
@@ -366,7 +360,7 @@ internal static class Social
             e.Use();
             return;
         }
-        var inputRect = new Rect(x - 10f, Screen.height - 62f, width + 20f, 38f);
+        var inputRect = new Rect(x - UiTheme.Px(10f), Screen.height - UiTheme.Px(62f), width + UiTheme.Px(20f), UiTheme.Px(38f));
         GUI.SetNextControlName("coop-chat");
         _draft = GUI.TextField(inputRect, _draft, 200, UiTheme.Input);
         GUI.FocusControl("coop-chat");
@@ -377,7 +371,7 @@ internal static class Social
         }
         if (string.IsNullOrEmpty(_draft))
         {
-            GUI.Label(new Rect(inputRect.x + 12f, inputRect.y + 9f, width, 24f), "Message … (Enter to send, Esc to cancel)", UiTheme.Small);
+            GUI.Label(new Rect(inputRect.x + UiTheme.Px(11f), inputRect.y + UiTheme.Px(10f), width, UiTheme.Px(24f)), "Message … (Enter to send, Esc to cancel)", UiTheme.Small);
         }
     }
 
@@ -399,6 +393,35 @@ internal static class Social
     public static void SystemLine(string text)
     {
         AddChat(UiTheme.Colored("• " + text, UiTheme.Muted));
+    }
+
+    public static bool IsTyping => _typing;
+
+    // The host's list of who is in the session (client side); names stay known after someone left.
+    private static readonly List<int> Roster = new List<int>();
+
+    public static void SetRoster(string ids)
+    {
+        Roster.Clear();
+        foreach (string id in ids.Split(','))
+        {
+            if (int.TryParse(id, out int player))
+            {
+                Roster.Add(player);
+            }
+        }
+    }
+
+    // Everyone in the session, the host first.
+    public static List<int> AllPlayers()
+    {
+        var all = new List<int> { Coop.HostPlayer };
+        all.AddRange(Coop.Role == Role.Host ? Coop.Players : Roster);
+        if (!all.Contains(Coop.Self))
+        {
+            all.Add(Coop.Self);
+        }
+        return all;
     }
 
     public static IEnumerable<int> KnownPlayers()

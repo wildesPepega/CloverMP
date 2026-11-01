@@ -119,7 +119,7 @@ internal static class DiscordPresence
         sb.Append(",\"assets\":{\"large_image\":").Append(Json(LargeImage)).Append(",\"large_text\":").Append(Json(large)).Append('}');
         if (Coop.Role != Role.Off)
         {
-            int size = Coop.Role == Role.Host ? 1 + Coop.Players.Count : Math.Max(2, Social.Names.Count);
+            int size = Social.AllPlayers().Count;
             string party = SteamSession.CurrentLobby.HasValue ? SteamSession.CurrentLobby.Value.Id.ToString() : "clovermp";
             sb.Append(",\"party\":{\"id\":").Append(Json("clovermp-" + party)).Append(",\"size\":[")
                 .Append(size).Append(',').Append(SteamSession.MaxPlayers).Append("]}");
