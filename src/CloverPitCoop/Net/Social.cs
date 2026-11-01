@@ -40,6 +40,11 @@ internal static class Social
 
     public static string NameOf(int player)
     {
+        // Known from the start: the list below only fills up once someone is connected.
+        if (player == Coop.Self)
+        {
+            return MyName;
+        }
         if (Names.TryGetValue(player, out string n) && !string.IsNullOrEmpty(n))
         {
             return n;
