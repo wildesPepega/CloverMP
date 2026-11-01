@@ -28,6 +28,7 @@ CloverMP is an independent fan project. It is not affiliated with or endorsed by
 - **Co-op menu** on `F8`.
 - **Discord Rich Presence**: your Discord status shows coins, clover tickets, the deadline (deposited / debt, rounds left) and, in co-op, the group size. Talks to the local Discord app directly, no extra DLL. Can be turned off in the `F8` menu.
 - **Only the host saves.**
+- **Automatic updates**: see below.
 
 ## Install
 
@@ -48,6 +49,14 @@ Every player needs CloverPit on Steam and the same mod version.
 - **Main menu** (click twice) goes to the title screen. As the host this ends the session for everyone. It saves in the room, not during a round, like the game's own pause menu.
 - Discord status: on by default; switch it in the `F8` menu (stored in `BepInEx\config\coop-anything.cloverpit-coop.cfg`).
 - Everyone should either own the DLC or not; the mod warns when it is mixed.
+
+## Automatic updates
+
+From version 0.7.7 on, the mod looks for a newer release of this repository on GitHub when the game starts (pre-releases included). If there is one, it downloads `CloverPitCoop.dll`, replaces the installed file and restarts the game. A player already in the room or in a co-op session is not interrupted; the file is replaced when they close the game.
+
+This runs code from this repository on your PC without asking each time. Turn it off with the **Updates** switch in the `F8` menu, or `AutoUpdate = false` under `[Updates]` in `BepInExnfigop-anything.cloverpit-coop.cfg`.
+
+It only accepts the DLL from this repository, with a higher version, whose SHA-256 matches what GitHub lists and whose name and version match the release. Each version is tried once.
 
 ## How it works
 
@@ -88,6 +97,7 @@ Last full test (v0.4.0): 110 actions over four rounds including paying the debt 
 - Auto-spin is not yet limited to the player at the machine.
 - Reconnecting, the surgery machine, the red button and the main menu are new and not tested in the game yet.
 - A player without the DLC has no surgery machine, and a mixed group goes out of sync.
+- The automatic update has not run in the game yet, and it is untested on Linux/Proton. If it fails, install the DLL by hand.
 - If the host crashes, friends may see "reconnecting" for up to 2.5 minutes before they land in the main menu.
 - If the mod waits for something on your side (an open dialogue), a notice shows; close it and play continues.
 

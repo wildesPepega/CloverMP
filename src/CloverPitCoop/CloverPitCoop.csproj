@@ -6,7 +6,7 @@
     <RootNamespace>CloverPitCoop</RootNamespace>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
-    <Version>0.7.6</Version>
+    <Version>0.7.7</Version>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <!-- Game folder (with BepInEx installed) to compile against. Override with -p:GameDir=...
@@ -30,6 +30,7 @@
     <Reference Include="UnityEngine.IMGUIModule" HintPath="$(Managed)\UnityEngine.IMGUIModule.dll" Private="false" />
     <Reference Include="UnityEngine.TextRenderingModule" HintPath="$(Managed)\UnityEngine.TextRenderingModule.dll" Private="false" />
     <Reference Include="UnityEngine.JSONSerializeModule" HintPath="$(Managed)\UnityEngine.JSONSerializeModule.dll" Private="false" />
+    <Reference Include="UnityEngine.UnityWebRequestModule" HintPath="$(Managed)\UnityEngine.UnityWebRequestModule.dll" Private="false" />
     <Reference Include="Facepunch.Steamworks.Win64" HintPath="$(Managed)\Facepunch.Steamworks.Win64.dll" Private="false" />
     <Reference Include="UniTask" HintPath="$(Managed)\UniTask.dll" Private="false" />
   </ItemGroup>

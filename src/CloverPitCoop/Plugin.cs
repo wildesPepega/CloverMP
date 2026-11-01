@@ -13,7 +13,7 @@ public class Plugin : BaseUnityPlugin
 {
     public const string Guid = "coop-anything.cloverpit-coop";
     public const string Name = "CloverPit Co-op";
-    public const string Version = "0.7.6";
+    public const string Version = "0.7.7";
 
     internal static ManualLogSource Log;
     internal static Plugin Instance;
@@ -36,6 +36,15 @@ public class Plugin : BaseUnityPlugin
         PhoneEveryoneSetting = Config.Bind("Coop", "PhoneEveryone", false,
             "When hosting: everyone can use the phone (false: host only).");
         Net.Coop.PhoneEveryone = PhoneEveryoneSetting.Value;
+        Net.AutoUpdate.Enabled = Config.Bind("Updates", "AutoUpdate", true,
+            "When the game starts: look for a newer CloverMP release on GitHub, install it and restart the game.");
+        Net.AutoUpdate.LastTried = Config.Bind("Updates", "LastTried", "",
+            "Set by the mod: the last version it installed, which it never tries twice.");
+        // Never in test runs: those must stay on the version being tested.
+        if (!Array.Exists(Environment.GetCommandLineArgs(), a => a.StartsWith("--coop-", StringComparison.Ordinal)))
+        {
+            StartCoroutine(Net.AutoUpdate.Run());
+        }
         if (!HasArg("--coop-dettest") && !HasArg("--coop-join") && !HasArg("--coop-join-steam") || HasArg("--coop-discordtest"))
         {
             Net.DiscordPresence.Start();

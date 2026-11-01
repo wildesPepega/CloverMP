@@ -293,6 +293,18 @@ internal static class CoopMenu
         }
         GUILayout.EndHorizontal();
 
+        GUILayout.Label("UPDATES", UiTheme.Section);
+        GUILayout.BeginHorizontal();
+        GUILayout.Label(AutoUpdate.Enabled.Value
+            ? $"Automatic{(string.IsNullOrEmpty(AutoUpdate.Status) ? "" : " · " + UiTheme.Colored(UiTheme.Plain(AutoUpdate.Status), UiTheme.Muted))}"
+            : UiTheme.Colored("Off", UiTheme.Muted), UiTheme.Label);
+        GUILayout.FlexibleSpace();
+        if (GUILayout.Button(AutoUpdate.Enabled.Value ? "TURN OFF" : "TURN ON", UiTheme.ButtonGhost, GUILayout.Width(110f)))
+        {
+            AutoUpdate.Enabled.Value = !AutoUpdate.Enabled.Value;
+        }
+        GUILayout.EndHorizontal();
+
         GUILayout.Space(12f);
         string again = Coop.Role == Role.Host && Coop.Players.Count > 0 ? "ENDS CO-OP FOR ALL – CLICK AGAIN" : "REALLY? CLICK AGAIN";
         if (GUILayout.Button(_confirmMainMenu ? again : "MAIN MENU", UiTheme.ButtonGhost))
