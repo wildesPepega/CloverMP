@@ -59,6 +59,8 @@ This runs code from this repository on your PC without asking each time. Turn it
 
 It only accepts the DLL from this repository, with a higher version, whose SHA-256 matches what GitHub lists and whose name and version match the release. Each version is tried once.
 
+Every step is written to `BepInEx\CloverMP-update.log`, which stays across restarts.
+
 ## How it works
 
 CloverPit's gameplay randomness comes from seeded random streams that are part of the run state, and every player action goes through a small set of entry points (`GameplayMaster.FCall_*`, the bet menu, the charm inspect menu, the phone UI). CloverMP uses **input lockstep with host authority**:

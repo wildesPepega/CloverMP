@@ -34,6 +34,8 @@ internal static class AutoUpdate
     private const string ScriptName = "CloverPitCoop-update.cmd";
     private const float RestartNoticeSeconds = 3f;
     private const int RequestTimeoutSeconds = 30;
+    private const string UpdateLogName = "CloverMP-update.log";
+    private const long UpdateLogMaxBytes = 64 * 1024;
 
     public static ConfigEntry<bool> Enabled;
     public static ConfigEntry<string> LastTried;
@@ -73,48 +75,57 @@ internal static class AutoUpdate
             yield break;
         }
         DeleteQuietly(Path.Combine(folder, Downloaded));
+        StartLogFile();
+        Note($"this is {Plugin.Version}, asking GitHub");
 
         string list = null;
-        yield return Fetch(ApiUrl, r => list = r.downloadHandler.text);
+        // GitHub's servers answer the same address from a 60 s cache, which hides a release made
+        // just now. A new address every time goes around it.
+        yield return Fetch($"{ApiUrl}&nocache={DateTime.UtcNow.Ticks}", r => list = r.downloadHandler.text);
         if (list == null)
         {
+            Fail("Could not reach GitHub", false);
             yield break;
         }
-        if (!NewestRelease(list, out Release release, out Asset asset, out Version version))
+        if (!NewestRelease(list, out Release release, out Asset asset, out Version version, out string seen))
         {
             Status = "Up to date";
-            Plugin.Log.LogInfo($"[coop] update: {Plugin.Version} is up to date");
+            Note($"{Plugin.Version} is up to date ({seen})");
             yield break;
         }
+        Note($"found {release.tag_name} ({seen})");
         if (LastTried.Value == release.tag_name)
         {
-            Status = $"{release.tag_name} did not install";
-            Plugin.Log.LogWarning($"[coop] update: {release.tag_name} was already tried, not again");
+            Fail($"{release.tag_name} did not install last time, install it by hand", false);
             yield break;
         }
         if (!asset.browser_download_url.StartsWith(DownloadPrefix, StringComparison.Ordinal)
             || asset.digest == null || !asset.digest.StartsWith("sha256:", StringComparison.Ordinal))
         {
-            Plugin.Log.LogWarning($"[coop] update: refused {release.tag_name}, unexpected address or no checksum");
+            Note($"unexpected address or no checksum: {asset.browser_download_url}, {asset.digest}");
+            Fail($"{release.tag_name} was refused", true);
             yield break;
         }
 
-        Plugin.Log.LogInfo($"[coop] update: downloading {release.tag_name}");
+        Note($"downloading {release.tag_name}");
         Status = $"Downloading {release.tag_name} …";
         byte[] file = null;
         yield return Fetch(asset.browser_download_url, r => file = r.downloadHandler.data);
         if (file == null)
         {
+            Fail($"{release.tag_name} could not be downloaded", true);
             yield break;
         }
+        Note($"downloaded {file.Length} bytes");
 
         string path = Path.Combine(folder, Downloaded);
         if (!Verify(file, asset.digest, version, path))
         {
             DeleteQuietly(path);
-            Status = $"{release.tag_name} failed the checks";
+            Fail($"{release.tag_name} failed the checks", true);
             yield break;
         }
+        Note("checks passed");
 
         // Before anything can go wrong: this version gets exactly one try.
         LastTried.Value = release.tag_name;
@@ -122,7 +133,7 @@ internal static class AutoUpdate
         if (!StartScript(folder, path, restart))
         {
             DeleteQuietly(path);
-            Status = $"{release.tag_name} could not be installed";
+            Fail($"{release.tag_name} could not be installed", true);
             yield break;
         }
         if (!restart)
@@ -130,14 +141,58 @@ internal static class AutoUpdate
             Status = $"{release.tag_name} installs when you close the game";
             Coop.Toast = $"CloverMP {release.tag_name} installs when you close the game";
             Coop.ToastUntil = Time.unscaledTime + 6f;
-            Plugin.Log.LogInfo($"[coop] update: {release.tag_name} ready, player is busy, installs on exit");
+            Note($"{release.tag_name} ready, player is busy, installs on exit");
             yield break;
         }
-        Plugin.Log.LogInfo($"[coop] update: {release.tag_name} ready, restarting the game");
+        Note($"{release.tag_name} ready, restarting the game");
         Coop.Toast = $"CloverMP updated to {release.tag_name} – restarting the game";
         Coop.ToastUntil = Time.unscaledTime + RestartNoticeSeconds + 5f;
         yield return new WaitForSecondsRealtime(RestartNoticeSeconds);
         Application.Quit();
+    }
+
+    // The game's own log starts over with every game start, so what happened before an update's
+    // restart would be gone. This file stays.
+    private static string LogFile => Path.Combine(Paths.BepInExRootPath, UpdateLogName);
+
+    private static void StartLogFile()
+    {
+        try
+        {
+            if (File.Exists(LogFile) && new FileInfo(LogFile).Length > UpdateLogMaxBytes)
+            {
+                File.Delete(LogFile);
+            }
+        }
+        catch (Exception e)
+        {
+            Plugin.Log.LogWarning("[coop] update: log file: " + e.Message);
+        }
+    }
+
+    private static void Note(string text)
+    {
+        Plugin.Log.LogInfo("[coop] update: " + text);
+        try
+        {
+            File.AppendAllText(LogFile, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {text}\r\n");
+        }
+        catch (Exception e)
+        {
+            Plugin.Log.LogWarning("[coop] update: log file: " + e.Message);
+        }
+    }
+
+    // Shown in the F8 menu; on the screen too when a found update did not make it.
+    private static void Fail(string text, bool toast)
+    {
+        Status = text;
+        Note(text);
+        if (toast)
+        {
+            Coop.Toast = "CloverMP update: " + text;
+            Coop.ToastUntil = Time.unscaledTime + 8f;
+        }
     }
 
     private static IEnumerator Fetch(string url, Action<UnityWebRequest> onSuccess)
@@ -150,17 +205,18 @@ internal static class AutoUpdate
         if (request.result != UnityWebRequest.Result.Success)
         {
             // Offline or GitHub unreachable: just play.
-            Plugin.Log.LogInfo($"[coop] update: no answer from GitHub ({request.error})");
+            Note($"no answer from {url}: {request.error} (HTTP {request.responseCode})");
             yield break;
         }
         onSuccess(request);
     }
 
-    private static bool NewestRelease(string json, out Release newest, out Asset asset, out Version version)
+    private static bool NewestRelease(string json, out Release newest, out Asset asset, out Version version, out string seen)
     {
         newest = null;
         asset = null;
         version = new Version(Plugin.Version);
+        seen = "could not read the release list";
         ReleaseList list;
         try
         {
@@ -168,13 +224,14 @@ internal static class AutoUpdate
         }
         catch (ArgumentException e)
         {
-            Plugin.Log.LogWarning("[coop] update: could not read the release list: " + e.Message);
+            Note("could not read the release list: " + e.Message);
             return false;
         }
         if (list?.items == null)
         {
             return false;
         }
+        seen = $"{list.items.Length} releases, first {(list.items.Length > 0 ? list.items[0].tag_name : "none")}";
         foreach (Release r in list.items)
         {
             Asset dll = r.assets?.FirstOrDefault(a => a.name == AssetName);
@@ -195,7 +252,7 @@ internal static class AutoUpdate
         string hash = BitConverter.ToString(sha.ComputeHash(file)).Replace("-", "").ToLowerInvariant();
         if ("sha256:" + hash != digest)
         {
-            Plugin.Log.LogWarning($"[coop] update: checksum differs ({hash} instead of {digest})");
+            Note($"checksum differs ({hash} instead of {digest})");
             return false;
         }
         try
@@ -205,14 +262,14 @@ internal static class AutoUpdate
             Version v = name.Version;
             if (name.Name != AssemblyShortName || v.Major != version.Major || v.Minor != version.Minor || v.Build != version.Build)
             {
-                Plugin.Log.LogWarning($"[coop] update: the file is {name.Name} {v}, expected {AssemblyShortName} {version}");
+                Note($"the file is {name.Name} {v}, expected {AssemblyShortName} {version}");
                 return false;
             }
             return true;
         }
         catch (Exception e)
         {
-            Plugin.Log.LogWarning("[coop] update: could not check the file: " + e.Message);
+            Note("could not check the file: " + e);
             return false;
         }
     }
@@ -223,7 +280,7 @@ internal static class AutoUpdate
         {
             string args = string.Join(" ", Environment.GetCommandLineArgs().Skip(1).Select(a => "\"" + a.Replace("\"", "") + "\""));
             string script = BuildScript(Process.GetCurrentProcess().Id, downloaded, Path.Combine(folder, AssetName),
-                restart, Paths.GameRootPath, Paths.ExecutablePath, args);
+                restart, Paths.GameRootPath, Paths.ExecutablePath, args, LogFile);
             string scriptPath = Path.Combine(folder, ScriptName);
             File.WriteAllText(scriptPath, script, new UTF8Encoding(false));
             Process.Start(new ProcessStartInfo("cmd.exe", $"/c \"\"{scriptPath}\"\"")
@@ -236,7 +293,7 @@ internal static class AutoUpdate
         }
         catch (Exception e)
         {
-            Plugin.Log.LogWarning("[coop] update: could not start the update script: " + e.Message);
+            Note("could not start the update script: " + e);
             return false;
         }
     }
@@ -245,9 +302,10 @@ internal static class AutoUpdate
     // file cannot be replaced the game still comes back, on the old version.
     // The game's mod loader (Doorstop) leaves variables behind to mark a running game; started
     // with them, the new game would run without any mods.
-    internal static string BuildScript(int gameProcess, string downloaded, string dll, bool restart, string gameFolder, string exe, string args)
+    internal static string BuildScript(int gameProcess, string downloaded, string dll, bool restart, string gameFolder, string exe, string args, string logFile)
     {
         string Esc(string s) => s.Replace("%", "%%");
+        string Log(string text) => $"(echo %date% %time% script: {text})>>\"{Esc(logFile)}\"\r\n";
         var s = new StringBuilder();
         s.Append("@echo off\r\n");
         s.Append("chcp 65001 >nul\r\n");
@@ -262,16 +320,22 @@ internal static class AutoUpdate
         s.Append($"move /y \"{Esc(downloaded)}\" \"{Esc(dll)}\" >nul 2>&1\r\n");
         s.Append("if not errorlevel 1 goto swapped\r\n");
         s.Append("set /a tries+=1\r\n");
-        s.Append("if %tries% geq 30 goto swapped\r\n");
+        s.Append("if %tries% geq 30 goto failed\r\n");
         s.Append("ping -n 2 127.0.0.1 >nul\r\n");
         s.Append("goto swap\r\n");
+        s.Append(":failed\r\n");
+        s.Append(Log("could not replace the DLL"));
+        s.Append("goto finish\r\n");
         s.Append(":swapped\r\n");
+        s.Append(Log("DLL replaced"));
+        s.Append(":finish\r\n");
         if (restart)
         {
             foreach (string name in new[] { "DOORSTOP_INITIALIZED", "DOORSTOP_DISABLE", "DOORSTOP_INVOKE_DLL_PATH", "DOORSTOP_MANAGED_FOLDER_DIR", "DOORSTOP_PROCESS_PATH", "DOORSTOP_DLL_SEARCH_DIRS", "DOORSTOP_MONO_LIB_PATH" })
             {
                 s.Append($"set {name}=\r\n");
             }
+            s.Append(Log("starting the game"));
             s.Append($"start \"\" /d \"{Esc(gameFolder)}\" \"{Esc(exe)}\" {Esc(args)}\r\n");
         }
         s.Append("(goto) 2>nul & del \"%~f0\"\r\n");

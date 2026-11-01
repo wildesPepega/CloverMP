@@ -13,7 +13,7 @@ public class Plugin : BaseUnityPlugin
 {
     public const string Guid = "coop-anything.cloverpit-coop";
     public const string Name = "CloverPit Co-op";
-    public const string Version = "0.7.9";
+    public const string Version = "0.7.10";
 
     internal static ManualLogSource Log;
     internal static Plugin Instance;
