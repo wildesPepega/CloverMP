@@ -29,6 +29,7 @@ internal static class SteamSession
         }
         _subscribed = true;
         SteamFriends.OnGameLobbyJoinRequested += (lobby, friend) => Join(lobby.Id);
+        SteamFriends.OnGameOverlayActivated += InputBlock.OverlayChanged;
         // Faster than waiting for the connection to time out when the host closes the game.
         SteamMatchmaking.OnLobbyMemberLeave += (lobby, member) =>
         {

@@ -71,6 +71,10 @@ internal static class CoopMenu
             }
             if (e.keyCode == KeyCode.F8 || (_open && e.keyCode == KeyCode.Escape))
             {
+                if (e.keyCode == KeyCode.Escape)
+                {
+                    InputBlock.SwallowEscape();
+                }
                 SetOpen(!_open);
                 e.Use();
                 return;

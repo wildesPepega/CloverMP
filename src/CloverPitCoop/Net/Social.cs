@@ -350,12 +350,14 @@ internal static class Social
         if (e.type == EventType.KeyDown && (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter))
         {
             Send(_draft);
+            InputBlock.HoldBriefly();
             Close();
             e.Use();
             return;
         }
         if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape)
         {
+            InputBlock.SwallowEscape();
             Close();
             e.Use();
             return;

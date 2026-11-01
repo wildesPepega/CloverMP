@@ -16,6 +16,64 @@ internal static class InputBlock
 {
     public static bool Active;
 
+    // The game reads the keyboard itself (Rewired) and can see a press a frame later than IMGUI.
+    // So a key that just closed one of our screens would still reach the game, and Esc would open
+    // its pause menu. For a moment after that the game keeps getting nothing, for Esc until the
+    // key is up. Same for the Steam overlay, which also closes on Esc.
+    private const float HoldSeconds = 0.25f;
+    private const int HoldFrames = 5;
+    private const float EscapeHeldLimit = 1.5f;
+
+    private static bool _overlayOpen;
+    private static bool _escapeDown;
+    private static float _escapeLimit;
+    private static float _holdUntil;
+    private static int _holdFrame;
+
+    public static bool Blocking
+    {
+        get
+        {
+            if (Active || _overlayOpen || Time.unscaledTime < _holdUntil || Time.frameCount <= _holdFrame)
+            {
+                return true;
+            }
+            // The key-up never arrives when the window lost focus in between.
+            return _escapeDown && Time.unscaledTime < _escapeLimit;
+        }
+    }
+
+    public static void HoldBriefly()
+    {
+        _holdUntil = Time.unscaledTime + HoldSeconds;
+        _holdFrame = Time.frameCount + HoldFrames;
+    }
+
+    public static void SwallowEscape()
+    {
+        HoldBriefly();
+        _escapeDown = true;
+        _escapeLimit = Time.unscaledTime + EscapeHeldLimit;
+    }
+
+    public static void OverlayChanged(bool open)
+    {
+        _overlayOpen = open;
+        if (!open)
+        {
+            HoldBriefly();
+        }
+    }
+
+    // Every IMGUI event.
+    public static void WatchKeys(Event e)
+    {
+        if (e.rawType == EventType.KeyUp && e.keyCode == KeyCode.Escape)
+        {
+            _escapeDown = false;
+        }
+    }
+
     private static bool _cursorSaved;
     private static bool _oldVisible;
     private static CursorLockMode _oldLock;
@@ -87,7 +145,7 @@ internal static class InputBlockBool
 
     private static bool Prefix(ref bool __result)
     {
-        if (!InputBlock.Active)
+        if (!InputBlock.Blocking)
         {
             return true;
         }
@@ -103,7 +161,7 @@ internal static class InputBlockFloat
 
     private static bool Prefix(ref float __result)
     {
-        if (!InputBlock.Active)
+        if (!InputBlock.Blocking)
         {
             return true;
         }
@@ -117,7 +175,7 @@ internal static class InputBlockMenuDirectional
 {
     private static bool Prefix(ref bool __result)
     {
-        if (!InputBlock.Active)
+        if (!InputBlock.Blocking)
         {
             return true;
         }

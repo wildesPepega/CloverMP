@@ -13,7 +13,7 @@ public class Plugin : BaseUnityPlugin
 {
     public const string Guid = "coop-anything.cloverpit-coop";
     public const string Name = "CloverPit Co-op";
-    public const string Version = "0.7.8";
+    public const string Version = "0.7.9";
 
     internal static ManualLogSource Log;
     internal static Plugin Instance;
@@ -142,6 +142,7 @@ public class Plugin : BaseUnityPlugin
 
     private void OnGUI()
     {
+        Net.InputBlock.WatchKeys(Event.current);
         // One broken screen must not take the others down with it, or leave the game's input blocked.
         SafeGui(Net.CoopMenu.OnGUI);
         SafeGui(Net.TabList.OnGUI);
