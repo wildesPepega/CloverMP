@@ -55,7 +55,7 @@ Every player needs CloverPit on Steam and the same mod version.
 
 From version 0.7.7 on, the mod looks for a newer release of this repository on GitHub when the game starts (pre-releases included). If there is one, it downloads `CloverPitCoop.dll`, replaces the installed file and restarts the game. A player already in the room or in a co-op session is not interrupted; the file is replaced when they close the game.
 
-This runs code from this repository on your PC without asking each time. Turn it off with the **Updates** switch in the `F8` menu, or `AutoUpdate = false` under `[Updates]` in `BepInExnfigop-anything.cloverpit-coop.cfg`.
+This runs code from this repository on your PC without asking each time. Turn it off with the **Automatic updates** switch in the `F8` menu, or `AutoUpdate = false` under `[Updates]` in `BepInEx\config\coop-anything.cloverpit-coop.cfg`.
 
 It only accepts the DLL from this repository, with a higher version, whose SHA-256 matches what GitHub lists and whose name and version match the release. Each version is tried once.
 
