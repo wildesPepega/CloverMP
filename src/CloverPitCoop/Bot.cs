@@ -88,6 +88,11 @@ internal static class BotInputPatch
 {
     private static void Postfix(Controls.InputAction action, ref bool __result)
     {
+        if (Net.PhoneNav.SuppressConfirm && (action == Controls.InputAction.menuSelect || action == Controls.InputAction.menuBack))
+        {
+            __result = false;
+            return;
+        }
         if (!__result && (Bot.IsPressed(action) || Net.Inject.IsPressed(action)))
         {
             __result = true;

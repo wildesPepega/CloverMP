@@ -83,7 +83,7 @@ internal static class Spectate
         var r = new Rect(Screen.width - w - 18f, 18f, w, h);
         GUI.Box(new Rect(r.x - 6f, r.y - 6f, r.width + 12f, r.height + 40f), GUIContent.none, UiTheme.Panel);
         GUI.DrawTexture(r, _rt, ScaleMode.ScaleToFit, false);
-        string line = $"{Social.ColoredName(Coop.MachineOwner)} at the machine · Spins {GameplayData.SpinsLeftGet()} · Coins {GameplayData.CoinsGet()}";
+        string line = $"{Social.ColoredName(Coop.MachineOwner)} · SPINS LEFT: {GameplayData.SpinsLeftGet()} · {UiTheme.Coins(GameplayData.CoinsGet())}";
         GUI.Label(new Rect(r.x + 2f, r.yMax + 6f, r.width, 24f), line, UiTheme.Label);
     }
 

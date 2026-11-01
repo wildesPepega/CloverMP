@@ -26,6 +26,7 @@ internal static class Resync
 {
     private const int ChunkSize = 48 * 1024;
     private const float Cooldown = 5f;
+    private const float AnswerTimeout = 45f;
 
     // ---- host ----
 
@@ -36,7 +37,7 @@ internal static class Resync
 
     public static void Schedule(int player)
     {
-        if (Sent.ContainsKey(player) || JoinSync.IsWaiting(player))
+        if (Sent.ContainsKey(player) || JoinSync.IsWaiting(player) || JoinSync.AwaitingLoad.Contains(player))
         {
             return;
         }
@@ -59,12 +60,35 @@ internal static class Resync
         bool phaseOk = p == GameplayMaster.GamePhase.preparation
             || (p == GameplayMaster.GamePhase.gambling && LocalFreedom.MachineIdle() && SlotMachineScript.StateGet() == SlotMachineScript.State.idle);
         return phaseOk && DialogueScript.instance != null && !DialogueScript.IsEnabled() && !PowerupTriggerAnimController.HasAnimations()
-            && !ATMScript.DebtClearCutsceneIsPlaying() && !PhoneUiScript.IsEnabled();
+            && !ATMScript.DebtClearCutsceneIsPlaying() && !PhoneUiScript.IsEnabled() && !SurgerySync.Busy;
     }
+
+    private const float QuietHold = 0.5f;
+    private static float _quietFor;
 
     public static void HostTick()
     {
+        // No answer to a correction: it got lost or that machine is still busy. Send a fresh one.
+        if (Sent.Count > 0)
+        {
+            foreach (int player in new List<int>(Sent.Keys))
+            {
+                if (Time.unscaledTime - LastSent[player] > AnswerTimeout)
+                {
+                    Sent.Remove(player);
+                    Scheduled.Add(player);
+                    Plugin.Log.LogInfo($"[coop] resync: no answer from player {player}, sending the correction again");
+                }
+            }
+        }
+        // Quiet for a moment, not just in a gap between two charm animations.
         if (Scheduled.Count == 0 || !HostQuiet())
+        {
+            _quietFor = 0f;
+            return;
+        }
+        _quietFor += Time.unscaledDeltaTime;
+        if (_quietFor < QuietHold)
         {
             return;
         }
@@ -83,7 +107,8 @@ internal static class Resync
     {
         int seq = Coop.LastSentSeq;
         string hash = StateHash.Of(StateHash.Json());   // also runs Save_Prepare
-        string json = JsonUtility.ToJson(GameplayData.Instance);
+        // Pretty-printed like the hashed state, so the client can compare it line by line.
+        string json = JsonUtility.ToJson(GameplayData.Instance, true);
         string b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
         int parts = (b64.Length + ChunkSize - 1) / ChunkSize;
         PhaseSpoof.Suspended = true;
@@ -126,7 +151,28 @@ internal static class Resync
         LastSent.Clear();
     }
 
+    // That player is getting the whole run, which replaces any correction.
+    public static void Forget(int player)
+    {
+        Scheduled.Remove(player);
+        Sent.Remove(player);
+    }
+
+    // That player's connection broke; a correction on its way is lost and has to go out again.
+    public static void AfterReconnect(int player)
+    {
+        if (Sent.Remove(player))
+        {
+            Scheduled.Add(player);
+        }
+    }
+
     // ---- client ----
+
+    public static void ClientDropPartial()
+    {
+        _chunks = null;
+    }
 
     private static string[] _chunks;
     private static int _seq = -1;
@@ -172,9 +218,11 @@ internal static class Resync
     public static IEnumerator Apply()
     {
         float t = 0f;
-        while (t < 180f && !QuietLikeHost())
+        float quiet = 0f;
+        while (t < 180f && quiet < QuietHold)
         {
             t += Time.unscaledDeltaTime;
+            quiet = QuietLikeHost() ? quiet + Time.unscaledDeltaTime : 0f;
             if (Coop.Automated && DialogueScript.instance != null && DialogueScript.IsEnabled())
             {
                 Bot.TickDialogues();
@@ -189,6 +237,7 @@ internal static class Resync
         {
             yield break;
         }
+        JoinSync.ReportDiff($"before correction #{seq}", StateHash.Blank(json), StateHash.Json());
         JsonUtility.FromJsonOverwrite(json, data);
         data.Load_Format();
         if (_flags != null)

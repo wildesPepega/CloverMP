@@ -16,17 +16,22 @@ internal static class Gate
         switch (Coop.Role)
         {
             case Role.Host:
+                if (kind == "phone" && LocalFreedom.Active)
+                {
+                    Coop.Show("Not allowed: wait until the round is over");
+                    return false;
+                }
                 return Coop.HostPass(kind, arg);
             case Role.Client:
                 if (Coop.Replaying)
                 {
                     return true;
                 }
-                if (kind == "phone")
+                if (kind == "phone" && (!Coop.PhoneEveryone || LocalFreedom.Active))
                 {
                     Coop.RefusedClient++;
-                    Coop.Show("Not allowed: only the host can use the phone");
-                    Plugin.Log.LogInfo("[coop] rule: phone refused locally (host only)");
+                    Coop.Show(Coop.PhoneEveryone ? "Not allowed: wait until the round is over" : "Not allowed: only the host can use the phone");
+                    Plugin.Log.LogInfo("[coop] rule: phone refused locally");
                     return false;
                 }
                 Coop.ClientRequest(kind, arg);
@@ -71,6 +76,32 @@ internal static class BetFreeGate
 internal static class SpinGate
 {
     private static bool Prefix(bool calledByAutoSpin) => Gate.Pass("spin", calledByAutoSpin ? "auto" : "");
+}
+
+// The red button on the machine; called by its menu element, which refuses during a spin.
+[HarmonyPatch(typeof(RedButtonScript), nameof(RedButtonScript.Press))]
+internal static class RedButtonGate
+{
+    private static bool Prefix() => Gate.Pass("redButton", "");
+}
+
+// Someone else pressed it: the charms fire and the button is heard here too, but the camera of
+// a player who may be walking around the room does not jump.
+internal static class RedButtonFx
+{
+    public static bool OthersPress;
+}
+
+[HarmonyPatch(typeof(Panik.CameraGame), nameof(Panik.CameraGame.Shake))]
+internal static class RedButtonNoShake
+{
+    private static bool Prefix() => !RedButtonFx.OthersPress && !SurgerySync.Foreign;
+}
+
+[HarmonyPatch(typeof(Panik.CameraGame), nameof(Panik.CameraGame.ChromaticAberrationIntensitySet))]
+internal static class RedButtonNoAberration
+{
+    private static bool Prefix() => !RedButtonFx.OthersPress && !SurgerySync.Foreign;
 }
 
 [HarmonyPatch(typeof(GameplayMaster), nameof(GameplayMaster.FCall_DepositTry))]

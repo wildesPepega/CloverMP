@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using BepInEx;
 using BepInEx.Logging;
@@ -13,11 +13,12 @@ public class Plugin : BaseUnityPlugin
 {
     public const string Guid = "coop-anything.cloverpit-coop";
     public const string Name = "CloverPit Co-op";
-    public const string Version = "0.5.0";
+    public const string Version = "0.7.5";
 
     internal static ManualLogSource Log;
     internal static Plugin Instance;
     internal static BepInEx.Configuration.ConfigEntry<bool> DiscordSetting;
+    internal static BepInEx.Configuration.ConfigEntry<bool> PhoneEveryoneSetting;
 
     private void Awake()
     {
@@ -32,6 +33,9 @@ public class Plugin : BaseUnityPlugin
         DiscordSetting = Config.Bind("Discord", "RichPresence", true,
             "Show coins, clover tickets and the deadline as your Discord status.");
         Net.DiscordPresence.Enabled = DiscordSetting.Value;
+        PhoneEveryoneSetting = Config.Bind("Coop", "PhoneEveryone", false,
+            "When hosting: everyone can use the phone (false: host only).");
+        Net.Coop.PhoneEveryone = PhoneEveryoneSetting.Value;
         if (!HasArg("--coop-dettest") && !HasArg("--coop-join") && !HasArg("--coop-join-steam") || HasArg("--coop-discordtest"))
         {
             Net.DiscordPresence.Start();
@@ -114,6 +118,16 @@ public class Plugin : BaseUnityPlugin
 
     private void OnApplicationQuit()
     {
+        // While Steam still runs, so the others hear of it right away.
+        try
+        {
+            Net.SteamSession.CurrentLobby?.Leave();
+            Net.Coop.Link?.Dispose();
+        }
+        catch (System.Exception e)
+        {
+            Log.LogWarning("[coop] quit: " + e.Message);
+        }
         Net.DiscordPresence.Stop();
     }
 

@@ -20,7 +20,7 @@ namespace CloverPitCoop.Net;
 //
 //   J|<snapSeq>|<part>|<parts>|<base64 chunk>   host -> joining client, GameData JSON
 //   F|<name=value;...>                          host -> joining client, runtime flags
-//   L|<hash>                                    client -> host, hash after loading
+//   L|<hash>|<dlc>|<snapSeq>                    client -> host, hash after loading
 internal static class JoinSync
 {
     private const int ChunkSize = 48 * 1024;
@@ -55,6 +55,9 @@ internal static class JoinSync
 
     public static bool IsWaiting(int player) => Waiting.Contains(player);
 
+    // Players who were sent a whole run and have not reported back yet.
+    public static readonly HashSet<int> AwaitingLoad = new HashSet<int>();
+
     // Players who got the run and stand in the room (for the F8 list and the join notice).
     public static readonly HashSet<int> InRoom = new HashSet<int>();
 
@@ -67,12 +70,28 @@ internal static class JoinSync
             && DialogueScript.instance != null && !DialogueScript.IsEnabled()
             && !ScreenMenuScript.IsEnabled() && !PowerupTriggerAnimController.HasAnimations()
             && !ATMScript.DebtClearCutsceneIsPlaying() && !SlotMachineScript.IsSpinning()
-            && !PhoneUiScript.IsEnabled() && !Coop.HostBusy
+            && !PhoneUiScript.IsEnabled() && !Coop.HostBusy && !SurgerySync.Busy && !SurgeryMachine.IsEnabled()
             && !(GeneralUiScript.instance != null && GeneralUiScript.instance.IsShowingTitleScreen());
     }
 
+    private const float LoadTimeout = 180f;
+    private static readonly Dictionary<int, float> RunSentAt = new Dictionary<int, float>();
+
     public static void HostTick()
     {
+        // No answer to a whole run for this long: the run or the answer got lost, send it again.
+        if (AwaitingLoad.Count > 0)
+        {
+            foreach (int p in new List<int>(AwaitingLoad))
+            {
+                if (RunSentAt.TryGetValue(p, out float at) && Time.unscaledTime - at > LoadTimeout)
+                {
+                    RunSentAt[p] = Time.unscaledTime;
+                    Plugin.Log.LogInfo($"[coop] join: no answer from player {p}, sending the run again");
+                    HostPlayerJoined(p);
+                }
+            }
+        }
         if (Waiting.Count == 0 || !HostStable())
         {
             return;
@@ -101,14 +120,28 @@ internal static class JoinSync
             Coop.Link.SendTo(player, $"K|{i}|{sparts}|{sb64.Substring(start, Math.Min(ChunkSize, sb64.Length - start))}");
         }
         SnapshotSeqs[player] = snapSeq;
+        AwaitingLoad.Add(player);
+        RunSentAt[player] = Time.unscaledTime;
+        Resync.Forget(player);
         Plugin.Log.LogInfo($"[coop] join: sent run to player {player}: {json.Length} chars in {parts} parts, at action #{snapSeq}, hash {SnapshotHashes[player]}");
     }
 
-    public static void HostLoaded(int player, string hash, string clientDlc)
+    public static void HostLoaded(int player, string hash, string clientDlc, int loadedSeq)
     {
+        // Answer to an older run; a newer one is on its way to that player.
+        if (loadedSeq >= 0 && SnapshotSeqs.TryGetValue(player, out int newest) && loadedSeq != newest)
+        {
+            Plugin.Log.LogInfo($"[coop] join: player {player} loaded the run of action #{loadedSeq}, newest is #{newest}");
+            return;
+        }
         SnapshotHashes.TryGetValue(player, out string expected);
         bool same = hash == expected;
+        AwaitingLoad.Remove(player);
         Plugin.Log.LogInfo($"[coop] join: player {player} loaded the run, hash {hash}, host snapshot {expected} -> {(same ? "same" : "DIFFERENT")}");
+        if (same)
+        {
+            Coop.ClearDesyncNotice(player);
+        }
         string hostDlc = OwnsDlc();
         if (clientDlc != null && clientDlc != hostDlc)
         {
@@ -164,8 +197,16 @@ internal static class JoinSync
             Plugin.Log.LogInfo("[coop] join: no host state received for comparison");
             return -1;
         }
-        string[] h = _hostStateJson.Split('\n');
+        return ReportDiff("join", _hostStateJson, mine);
+    }
+
+    // Logs where this machine's state differs from the host's and tells the host too, so the
+    // fields also end up in the host's log.
+    public static int ReportDiff(string what, string host, string mine)
+    {
+        string[] h = host.Split('\n');
         string[] c = mine.Split('\n');
+        var lines = new List<string>();
         int diffs = 0;
         for (int i = 0; i < Math.Max(h.Length, c.Length); i++)
         {
@@ -176,11 +217,11 @@ internal static class JoinSync
                 continue;
             }
             diffs++;
-            if (diffs <= 40)
+            if (diffs <= 20)
             {
                 // The field name is on this line or, for array items, on an earlier line.
                 string field = "";
-                for (int j = i; j >= 0 && j < h.Length; j--)
+                for (int j = Math.Min(i, h.Length - 1); j >= 0; j--)
                 {
                     if (h[j].Contains("\":"))
                     {
@@ -188,12 +229,22 @@ internal static class JoinSync
                         break;
                     }
                 }
-                Plugin.Log.LogInfo($"[coop] join diff line {i} ({field}): host {hl} | mine {cl}");
+                lines.Add($"{what} line {i} ({Cut(field)}): host {Cut(hl)} | mine {Cut(cl)}");
             }
         }
-        Plugin.Log.LogInfo($"[coop] join: {diffs} differing lines");
+        lines.Add($"{what}: {diffs} differing lines");
+        foreach (string line in lines)
+        {
+            Plugin.Log.LogInfo("[coop] diff " + line);
+        }
+        if (diffs > 0 && Coop.Link != null)
+        {
+            Coop.Link.Send("D|" + Social.Encode(string.Join("\n", lines)));
+        }
         return diffs;
     }
+
+    private static string Cut(string s) => s.Length > 90 ? s.Substring(0, 90) + "…" : s;
 
     public static string ReadFlags()
     {
@@ -235,7 +286,15 @@ internal static class JoinSync
         _pendingJson = Encoding.UTF8.GetString(Convert.FromBase64String(string.Concat(_chunks)));
         _pendingSeq = snapSeq;
         _chunks = null;
+        Coop.SetActionBase(snapSeq);
         Plugin.Log.LogInfo($"[coop] join: received host run ({_pendingJson.Length} chars, action #{snapSeq})");
+    }
+
+    // The connection broke in the middle of a run; the host sends all of it again.
+    public static void ClientDropPartial()
+    {
+        _chunks = null;
+        _stateChunks = null;
     }
 
     private static string _pendingJson;
@@ -294,6 +353,7 @@ internal static class JoinSync
         }
         SnapSeq = snapSeq;
         Resync.ClientReset();
+        Coop.ClearRequests();
         InCoopRun = true;
         Loading = true;
         data.Loading_Prepare();
@@ -301,11 +361,11 @@ internal static class JoinSync
         CaptureRng(data.gameplayData);
         Plugin.Log.LogInfo($"[coop] join: loaded host run ({json.Length} chars, action #{snapSeq}), restarting the game scene");
         Coop.Show("Loading the host's run …");
-        Plugin.Instance.StartCoroutine(AfterReload(GameplayMaster.instance));
+        Plugin.Instance.StartCoroutine(AfterReload(GameplayMaster.instance, snapSeq));
         Level.GoTo(Level.SceneIndex.Game, asyncLoad: false);
     }
 
-    private static IEnumerator AfterReload(GameplayMaster oldScene)
+    private static IEnumerator AfterReload(GameplayMaster oldScene, int snapSeq)
     {
         // Wait for the new scene (a new GameplayMaster) to stand in the room. Dialogues of the
         // intro are clicked like a player would (they only show text).
@@ -329,7 +389,7 @@ internal static class JoinSync
         string hash = StateHash.Of(loadedJson);
         File.WriteAllText(Path.Combine(BepInEx.Paths.BepInExRootPath, "coop-join-client.json"), loadedJson);
         LogDiff(loadedJson);
-        Coop.Link.Send($"L|{hash}|{OwnsDlc()}");
+        Coop.Link.Send($"L|{hash}|{OwnsDlc()}|{snapSeq}");
         Plugin.Log.LogInfo($"[coop] join: standing in the host's run after {t:0}s, hash {hash}");
         Coop.Show("You are in the host's run");
     }
@@ -409,11 +469,42 @@ internal static class JoinSync
         InCoopRun = false;
         string now = SaveFilesHash();
         Plugin.Log.LogInfo($"[coop] join: own save files {(now == _saveHashAtJoin ? "unchanged" : "CHANGED")} during co-op ({_saveHashAtJoin} -> {now})");
+        yield return LoadSaveAndShowTitle();
+    }
+
+    // F8 "Main menu" of a host or a player alone. Saves like the game does when its pause menu
+    // opens: in the room yes, during a round no, so a round cannot be undone by going to the menu.
+    public static IEnumerator ToMainMenu()
+    {
+        PhaseSpoof.Suspended = true;
+        bool inRoom = GameplayMaster.GetGamePhase() == GameplayMaster.GamePhase.preparation;
+        PhaseSpoof.Suspended = false;
+        if (inRoom)
+        {
+            UniTask<bool> save = Data.SaveGame(Data.GameSavingReason.mainMenuOpened_NotDuringSlotMachine);
+            while (save.Status == UniTaskStatus.Pending)
+            {
+                yield return null;
+            }
+        }
+        yield return LoadSaveAndShowTitle();
+    }
+
+    // The game shows its title screen and the Continue / New run menu when the game scene starts,
+    // but skips them after a death in this session unless it comes from the victory screen. That
+    // flag has no other effect (GeneralUiScript.IntroAndTitleScreen_Coroutine reads it).
+    private static IEnumerator LoadSaveAndShowTitle()
+    {
         UniTask<bool> load = Data.LoadGame(Data.GameDataIndex, forceLoadSameFile: true);
         while (load.Status == UniTaskStatus.Pending)
         {
             yield return null;
         }
+        Loading = false;
+        SnapSeq = -1;
+        InputBlock.Set(false);
+        Sound.StopAll();
+        GeneralUiScript.ComingFromVictoryFlag_Set(true);
         Level.GoTo(Level.SceneIndex.Game, asyncLoad: false);
     }
 

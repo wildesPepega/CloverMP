@@ -14,6 +14,11 @@ internal static class CameraPatch
 
     private static bool Prefix(CameraController.PositionKind kind)
     {
+        // Someone else's surgery: this player only watches it from wherever they stand.
+        if (SurgerySync.Foreign)
+        {
+            return false;
+        }
         if (Coop.Role == Role.Off || Coop.MachineOwner < 0 || Coop.MachineOwner == Coop.Self)
         {
             return true;

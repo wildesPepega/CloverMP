@@ -9,6 +9,9 @@ namespace CloverPitCoop.Net;
 // no game assets.
 internal static class Avatars
 {
+    // Position updates may get lost: a player stays visible through short gaps.
+    public const float StaleAfter = 4f;
+
     private static readonly Color[] Palette =
     {
         new Color(0.95f, 0.75f, 0.2f), new Color(0.3f, 0.75f, 1f), new Color(0.95f, 0.35f, 0.5f), new Color(0.45f, 0.9f, 0.45f),
@@ -60,7 +63,7 @@ internal static class Avatars
             {
                 continue;
             }
-            bool fresh = here && Time.unscaledTime - a.LastSeen < 1.5f && Coop.Role != Role.Off;
+            bool fresh = here && Time.unscaledTime - a.LastSeen < StaleAfter && Coop.Role != Role.Off;
             if (a.Root.activeSelf != fresh)
             {
                 a.Root.SetActive(fresh);

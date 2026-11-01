@@ -206,6 +206,7 @@ internal static class SelfTest
             }
             yield return null;
         }
+        yield return Net.Coop.WaitStable();
     }
 
     // Waits until the slot machine is idle and no dialogue or menu is open, clicking dialogues away.

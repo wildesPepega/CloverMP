@@ -234,6 +234,7 @@ internal static class DetTest
             }
             yield return null;
         }
+        yield return Net.Coop.WaitStable();
     }
 
     internal static bool Busy()
@@ -242,7 +243,7 @@ internal static class DetTest
         GameplayMaster.GamePhase phase = GameplayMaster.GetGamePhase();
         Net.PhaseSpoof.Suspended = false;
         return Bot.DialogueOrMenuOpen() || PowerupTriggerAnimController.HasAnimations() || ATMScript.DebtClearCutsceneIsPlaying()
-            || phase == GameplayMaster.GamePhase.cutscene;
+            || phase == GameplayMaster.GamePhase.cutscene || Net.SurgerySync.Busy;
     }
 
     private static IEnumerator Deposit(int round)

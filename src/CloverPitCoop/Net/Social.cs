@@ -27,11 +27,14 @@ internal static class Social
     private static readonly Dictionary<int, float> GazeSeen = new Dictionary<int, float>();
     private static readonly List<(float time, string line)> Chat = new List<(float, string)>();
 
+    // Other players who have the chat open right now; comes with their position updates.
+    private static readonly HashSet<int> Typing = new HashSet<int>();
+
     private static float _nextGaze;
     private static bool _typing;
     private static int _openedFrame = -10;
     private static string _draft = "";
-    private static GUIStyle _tag, _chat;
+    private static GUIStyle _tag;
 
     public static string MyName => SteamClient.IsValid ? SteamClient.Name : "Player";
 
@@ -65,6 +68,7 @@ internal static class Social
         Gaze.Clear();
         Avatars.Clear();
         GazeSeen.Clear();
+        Typing.Clear();
         _typing = false;
     }
 
@@ -120,10 +124,18 @@ internal static class Social
                 int player = Coop.Role == Role.Host ? from : int.Parse(p[1]);
                 if (Coop.Role == Role.Host)
                 {
-                    Coop.Link.Send($"G|{player}|{p[2]}|{p[3]}|{p[4]}|{p[5]}|{p[6]}");
+                    Coop.Link.SendVolatile($"G|{player}|{p[2]}|{p[3]}|{p[4]}|{p[5]}|{p[6]}|{(p.Length > 7 ? p[7] : "0")}");
                 }
                 if (player != Coop.Self)
                 {
+                    if (p.Length > 7 && p[7] == "1")
+                    {
+                        Typing.Add(player);
+                    }
+                    else
+                    {
+                        Typing.Remove(player);
+                    }
                     Gaze[player] = new Vector3(F(p[2]), F(p[3]), F(p[4]));
                     GazeSeen[player] = Time.unscaledTime;
                     Avatars.Set(player, Gaze[player], F(p[5]), F(p[6]));
@@ -183,7 +195,8 @@ internal static class Social
         Transform t = cam.transform;
         Vector3 head = t.position;
         Vector3 e = t.eulerAngles;
-        Coop.Link.Send($"G|{Coop.Self}|{S(head.x)}|{S(head.y)}|{S(head.z)}|{S(e.y)}|{S(e.x)}");
+        // Replaced 5 times a second anyway: may get lost, and never holds up the game's actions.
+        Coop.Link.SendVolatile($"G|{Coop.Self}|{S(head.x)}|{S(head.y)}|{S(head.z)}|{S(e.y)}|{S(e.x)}|{(_typing ? "1" : "0")}");
     }
 
     private static Camera ViewCamera()
@@ -201,8 +214,8 @@ internal static class Social
         {
             return;
         }
-        _tag ??= new GUIStyle(GUI.skin.label) { fontSize = 18, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
-        _chat ??= new GUIStyle(GUI.skin.label) { fontSize = 17, wordWrap = true };
+        UiTheme.Ensure();
+        _tag = UiTheme.NameTag;
         DrawTags();
         DrawChat();
     }
@@ -216,7 +229,7 @@ internal static class Social
         }
         foreach (KeyValuePair<int, Vector3> g in Gaze)
         {
-            if (Time.unscaledTime - GazeSeen[g.Key] > 1.5f)
+            if (Time.unscaledTime - GazeSeen[g.Key] > Avatars.StaleAfter)
             {
                 continue;
             }
@@ -235,7 +248,37 @@ internal static class Social
             GUI.color = Avatars.ColorOf(g.Key);
             GUI.Label(r, NameOf(g.Key), _tag);
             GUI.color = Color.white;
+            if (Typing.Contains(g.Key))
+            {
+                DrawTypingBubble(x, r.y - 4f);
+            }
         }
+    }
+
+    // Small black speech bubble with three dots lighting up in turn, standing on the name.
+    private static void DrawTypingBubble(float centerX, float bottom)
+    {
+        const float dot = 4f;
+        const float gap = 4f;
+        const float width = 3f * dot + 2f * gap + 16f;
+        const float height = 18f;
+        const float tail = 4f;
+        float top = bottom - tail - height;
+        Fill(new Rect(centerX - width / 2f, top, width, height), Color.black);
+        Fill(new Rect(centerX - 3f, top + height, 6f, tail), Color.black);
+        int active = (int)(Time.unscaledTime * 3f) % 3;
+        for (int i = 0; i < 3; i++)
+        {
+            float dotX = centerX - (3f * dot + 2f * gap) / 2f + i * (dot + gap);
+            Fill(new Rect(dotX, top + (height - dot) / 2f, dot, dot), i == active ? UiTheme.Orange : UiTheme.Muted);
+        }
+        GUI.color = Color.white;
+    }
+
+    private static void Fill(Rect r, Color c)
+    {
+        GUI.color = c;
+        GUI.DrawTexture(r, Texture2D.whiteTexture);
     }
 
     // Chat box bottom left: recent lines fade out after a while; while typing the whole history
@@ -266,33 +309,37 @@ internal static class Social
         float x = 24f;
         float bottom = Screen.height - 24f - (_typing ? 46f : 0f);
 
-        var visible = new List<(float alpha, string text)>();
+        var visible = new List<(float alpha, string text, float height)>();
+        float linesHeight = 0f;
         foreach ((float time, string line) in Chat)
         {
             float age = Time.unscaledTime - time;
             float alpha = _typing ? 1f : Mathf.Clamp01((ChatShowSeconds - age) / 2f);
             if (alpha > 0f)
             {
-                visible.Add((alpha, line));
+                // A long message takes several lines.
+                float height = Mathf.Max(lineH, UiTheme.ChatLine.CalcHeight(new GUIContent(line), width) + 4f);
+                visible.Add((alpha, line, height));
+                linesHeight += height;
             }
         }
         if (visible.Count > 0 || _typing)
         {
-            float h = Mathf.Max(1, visible.Count) * lineH + 16f;
+            float h = Mathf.Max(lineH, linesHeight) + 16f;
             float top = bottom - h;
             float panelAlpha = 0f;
-            foreach ((float alpha, string _) in visible)
+            foreach ((float alpha, string _, float _) in visible)
             {
                 panelAlpha = Mathf.Max(panelAlpha, alpha);
             }
             GUI.color = new Color(1f, 1f, 1f, _typing ? 1f : panelAlpha);
             GUI.Box(new Rect(x - 10f, top, width + 20f, h), GUIContent.none, UiTheme.PanelSoft);
             float y = top + 8f;
-            foreach ((float alpha, string text) in visible)
+            foreach ((float alpha, string text, float height) in visible)
             {
                 GUI.color = new Color(1f, 1f, 1f, alpha);
-                GUI.Label(new Rect(x, y, width, lineH), text, UiTheme.ChatLine);
-                y += lineH;
+                GUI.Label(new Rect(x, y, width, height), text, UiTheme.ChatLine);
+                y += height;
             }
             GUI.color = Color.white;
         }

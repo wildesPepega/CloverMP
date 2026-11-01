@@ -17,6 +17,7 @@ internal static class SteamSession
     public static Lobby? CurrentLobby;
     public static string Status = "";
     private static bool _subscribed;
+    private static SteamId _hostId;
 
     // Called once Steam is up: listen for invites, and handle a launch through an invite
     // (Steam starts the game with +connect_lobby <id>).
@@ -28,6 +29,21 @@ internal static class SteamSession
         }
         _subscribed = true;
         SteamFriends.OnGameLobbyJoinRequested += (lobby, friend) => Join(lobby.Id);
+        // Faster than waiting for the connection to time out when the host closes the game.
+        SteamMatchmaking.OnLobbyMemberLeave += (lobby, member) =>
+        {
+            if (IsHostOfMyLobby(lobby, member))
+            {
+                Coop.HostGone("left the lobby");
+            }
+        };
+        SteamMatchmaking.OnLobbyMemberDisconnected += (lobby, member) =>
+        {
+            if (IsHostOfMyLobby(lobby, member))
+            {
+                _hostDroppedAt = Time.unscaledTime;
+            }
+        };
         if (Plugin.ArgValue("+connect_lobby") is string id && ulong.TryParse(id, out ulong lobbyId))
         {
             Join(lobbyId);
@@ -69,7 +85,7 @@ internal static class SteamSession
     {
         if (Coop.Role != Role.Off)
         {
-            Coop.Show("Du bist schon in einer Co-op-Runde");
+            Coop.Show("You are already in a co-op session");
             return;
         }
         Status = "Joining …";
@@ -93,6 +109,8 @@ internal static class SteamSession
         }
         CurrentLobby = lobby;
         SteamId owner = lobby.Owner.Id;
+        _hostId = owner;
+        _hostDroppedAt = null;
         Coop.StartClient(SteamLink.Join(owner), $"Steam relay to {lobby.Owner.Name}");
         Status = $"Connected to {lobby.Owner.Name}";
     }
@@ -101,11 +119,36 @@ internal static class SteamSession
     {
         CurrentLobby?.Leave();
         CurrentLobby = null;
+        _hostDroppedAt = null;
         if (Coop.Role != Role.Off)
         {
             Coop.Stop();
         }
         Status = "Playing alone";
+    }
+
+    // A friend's own run comes back by leaving (Coop.Stop); the host or a player alone goes
+    // through saving first.
+    public static void ToMainMenu()
+    {
+        bool playingHostsRun = JoinSync.InCoopRun;
+        Leave();
+        if (!playingHostsRun)
+        {
+            Plugin.Instance.StartCoroutine(JoinSync.ToMainMenu());
+        }
+    }
+
+    // The host is out of the Steam lobby. Lost contact alone can also be a short network problem,
+    // so that only counts together with a broken link, and only for a while.
+    private static float? _hostDroppedAt;
+    private const float HostDroppedWindow = 60f;
+
+    public static bool HostDroppedFromLobby => _hostDroppedAt.HasValue && Time.unscaledTime - _hostDroppedAt.Value < HostDroppedWindow;
+
+    private static bool IsHostOfMyLobby(Lobby lobby, Friend member)
+    {
+        return Coop.Role == Role.Client && CurrentLobby.HasValue && CurrentLobby.Value.Id == lobby.Id && member.Id == _hostId;
     }
 }
 
@@ -113,6 +156,7 @@ internal static class SteamSession
 internal static class CoopMenu
 {
     private static bool _open;
+    private static bool _confirmMainMenu;
 
     public static bool IsOpen => _open;
 
@@ -153,6 +197,7 @@ internal static class CoopMenu
         }
         if (!_open)
         {
+            _confirmMainMenu = false;
             return;
         }
         InputBlock.KeepCursorFree();
@@ -163,12 +208,12 @@ internal static class CoopMenu
         GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), Texture2D.whiteTexture);
         GUI.color = UnityEngine.Color.white;
 
-        const float w = 440f;
+        const float w = 480f;
         GUILayout.BeginArea(new Rect(36f, Mathf.Max(36f, Screen.height * 0.5f - 230f), w, Screen.height - 72f));
         GUILayout.BeginVertical(UiTheme.Panel);
 
         GUILayout.BeginHorizontal();
-        GUILayout.Label(UiTheme.Colored("♣ ", UiTheme.Green) + "CLOVERPIT CO-OP", UiTheme.Title);
+        GUILayout.Label(UiTheme.Colored("♣ ", UiTheme.Green) + "CLOVERMP", UiTheme.Title);
         GUILayout.FlexibleSpace();
         GUILayout.Label("v" + Plugin.Version, UiTheme.Small, GUILayout.ExpandWidth(false));
         GUILayout.EndHorizontal();
@@ -186,7 +231,7 @@ internal static class CoopMenu
         {
             GUILayout.Label("PLAY", UiTheme.Section);
             GUILayout.Label("Alone in the room. Start a session for your friends:", UiTheme.Label);
-            if (GUILayout.Button("Host co-op", UiTheme.Button))
+            if (GUILayout.Button("HOST CO-OP", UiTheme.Button))
             {
                 SteamSession.Host();
             }
@@ -203,18 +248,33 @@ internal static class CoopMenu
 
             GUILayout.Label("SLOT MACHINE", UiTheme.Section);
             GUILayout.Label(Coop.MachineOwner >= 0
-                ? $"{Social.ColoredName(Coop.MachineOwner)} is playing · Spins {GameplayData.SpinsLeftGet()} · Coins {GameplayData.CoinsGet()}"
-                : UiTheme.Colored("free", UiTheme.Green), UiTheme.Label);
+                ? $"{Social.ColoredName(Coop.MachineOwner)} · SPINS LEFT: {GameplayData.SpinsLeftGet()} · {UiTheme.Coins(GameplayData.CoinsGet())}"
+                : UiTheme.Colored("FREE", UiTheme.Green), UiTheme.Label);
 
             GUILayout.Space(10f);
-            if (Coop.Role == Role.Host && GUILayout.Button("Invite friends", UiTheme.Button))
+            if (Coop.Role == Role.Host && GUILayout.Button("INVITE FRIENDS", UiTheme.Button))
             {
                 SteamSession.Invite();
             }
-            if (GUILayout.Button("Leave co-op", UiTheme.ButtonGhost))
+            if (GUILayout.Button("LEAVE CO-OP", UiTheme.ButtonGhost))
             {
                 SteamSession.Leave();
             }
+        }
+
+        GUILayout.Label("PHONE", UiTheme.Section);
+        GUILayout.BeginHorizontal();
+        GUILayout.Label(Coop.PhoneEveryone ? "Everyone can use it" : "Host only", UiTheme.Label);
+        GUILayout.FlexibleSpace();
+        if (Coop.Role != Role.Client
+            && GUILayout.Button(Coop.PhoneEveryone ? "HOST ONLY" : "EVERYONE", UiTheme.ButtonGhost, GUILayout.Width(110f)))
+        {
+            Coop.SetPhoneEveryone(!Coop.PhoneEveryone);
+        }
+        GUILayout.EndHorizontal();
+        if (Coop.PhoneUser >= 0)
+        {
+            GUILayout.Label($"{Social.ColoredName(Coop.PhoneUser)} is on the phone", UiTheme.Small);
         }
 
         GUILayout.Label("DISCORD", UiTheme.Section);
@@ -223,7 +283,7 @@ internal static class CoopMenu
             ? $"Status shown · {UiTheme.Colored(DiscordPresence.Status, UiTheme.Muted)}"
             : UiTheme.Colored("Status hidden", UiTheme.Muted), UiTheme.Label);
         GUILayout.FlexibleSpace();
-        if (GUILayout.Button(DiscordPresence.Enabled ? "Turn off" : "Turn on", UiTheme.ButtonGhost, GUILayout.Width(110f)))
+        if (GUILayout.Button(DiscordPresence.Enabled ? "TURN OFF" : "TURN ON", UiTheme.ButtonGhost, GUILayout.Width(110f)))
         {
             DiscordPresence.SetEnabled(!DiscordPresence.Enabled);
             if (Plugin.DiscordSetting != null)
@@ -233,8 +293,20 @@ internal static class CoopMenu
         }
         GUILayout.EndHorizontal();
 
+        GUILayout.Space(12f);
+        string again = Coop.Role == Role.Host && Coop.Players.Count > 0 ? "ENDS CO-OP FOR ALL – CLICK AGAIN" : "REALLY? CLICK AGAIN";
+        if (GUILayout.Button(_confirmMainMenu ? again : "MAIN MENU", UiTheme.ButtonGhost))
+        {
+            if (_confirmMainMenu)
+            {
+                SetOpen(false);
+                SteamSession.ToMainMenu();
+            }
+            _confirmMainMenu = !_confirmMainMenu;
+        }
+
         GUILayout.Space(8f);
-        GUILayout.Label("T  Chat      F8 / Esc  close", UiTheme.Small);
+        GUILayout.Label("T: CHAT    F8 / ESC: CLOSE", UiTheme.Small);
         GUILayout.EndVertical();
         GUILayout.EndArea();
     }
@@ -244,20 +316,32 @@ internal static class CoopMenu
         string tags = "";
         if (player == Coop.HostPlayer)
         {
-            tags += UiTheme.Colored("  HOST", UiTheme.Gold);
+            tags += UiTheme.Colored("  HOST", UiTheme.Orange);
         }
         if (player == Coop.Self)
         {
-            tags += UiTheme.Colored("  you", UiTheme.Muted);
+            tags += UiTheme.Colored("  YOU", UiTheme.Muted);
         }
         if (player == Coop.MachineOwner)
         {
-            tags += UiTheme.Colored("  at the machine", UiTheme.Green);
+            tags += UiTheme.Colored("  AT THE MACHINE", UiTheme.Green);
+        }
+        if (player == Coop.SurgeryUser)
+        {
+            tags += UiTheme.Colored("  AT THE SURGERY MACHINE", UiTheme.Green);
         }
         if (Coop.Role == Role.Host && player != Coop.HostPlayer && !JoinSync.InRoom.Contains(player))
         {
-            tags += UiTheme.Colored("  loading …", UiTheme.Muted);
+            tags += UiTheme.Colored("  LOADING ...", UiTheme.Muted);
         }
-        GUILayout.Label($"{UiTheme.Colored("●", Avatars.ColorOf(player))}  {UiTheme.Plain(Social.NameOf(player))}{tags}", UiTheme.Label);
+        if (Coop.Interrupted.Contains(player))
+        {
+            tags += UiTheme.Colored("  RECONNECTING ...", UiTheme.Orange);
+        }
+        else if (Coop.PingText(player) != null)
+        {
+            tags += UiTheme.Colored("  " + Coop.PingText(player), UiTheme.Muted);
+        }
+        GUILayout.Label($"{UiTheme.Colored("■", Avatars.ColorOf(player))}  {UiTheme.Plain(Social.NameOf(player))}{tags}", UiTheme.Label);
     }
 }

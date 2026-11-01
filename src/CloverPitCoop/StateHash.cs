@@ -22,8 +22,10 @@ internal static class StateHash
             return null;
         }
         data.Save_Prepare();
-        return WallClock.Replace(JsonUtility.ToJson(data, true), "${1}0");
+        return Blank(JsonUtility.ToJson(data, true));
     }
+
+    public static string Blank(string json) => WallClock.Replace(json, "${1}0");
 
     public static string Of(string json)
     {

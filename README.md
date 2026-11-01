@@ -17,10 +17,14 @@ CloverMP is an independent fan project. It is not affiliated with or endorsed by
 - **Host is the authority**: after every action all games compare a hash of the run state. If a player differs, their game takes over the host's values (coins, tickets, deposit, interest and the coins in the interest tray, debt, deadline, rounds, spins, random streams). If that is not enough, the whole run is sent again.
 - **One player at the slot machine at a time.** Everyone else stays free: walk, look around, buy and sell charms, deposit, collect interest, use drawers. Their actions run between two spins.
 - **Machine view**: while someone else plays, a small window shows the slot machine with spins and coins.
-- **Phone**: host only, choices are synced (pickup, reroll, ability).
+- **Red button** on the machine and the **surgery machine** (DLC): synced, one player at a time at the surgery machine; the others see the surgery in the room.
+- **Phone**: the host chooses in the `F8` menu whether only the host or everyone may use it. Choices are synced (pickup, reroll, ability), nobody else gets pulled in.
+- **Bad connections**: a friend who loses the connection reconnects automatically and gets what they missed. Ping is shown in the `F8` menu.
+- **Failed actions stay private**: "no space for this charm" only reaches the player who tried it.
+- **Main menu**: an `F8` button, and friends land there when the host ends the session, to continue their own run or start a new one.
 - **New run / death**: the host's new run is sent to everyone automatically.
 - **Players** shown as simple colored figures with their Steam name.
-- **Chat** on `T`, with a quiet sound for messages from others.
+- **Chat** on `T`, with a soft pop for messages from others (your own sound: a 16 bit PCM `chat.wav` next to the DLL) and a typing bubble above the name.
 - **Co-op menu** on `F8`.
 - **Discord Rich Presence**: your Discord status shows coins, clover tickets, the deadline (deposited / debt, rounds left) and, in co-op, the group size. Talks to the local Discord app directly, no extra DLL. Can be turned off in the `F8` menu.
 - **Only the host saves.**
@@ -40,7 +44,8 @@ Every player needs CloverPit on Steam and the same mod version.
 - `F8`: co-op menu (available once you stand in the room). Host: **Host co-op**, then invite friends through the Steam overlay.
 - Friends: start the game, wait until you stand in the room, then accept the invite in Steam.
 - `T`: chat. `F8` / `Esc`: close the menu.
-- **Leave co-op** returns you to your own save.
+- **Leave co-op** ends the session. A friend returns to the main menu with their own save; the host keeps playing alone.
+- **Main menu** (click twice) goes to the title screen. As the host this ends the session for everyone. It saves in the room, not during a round, like the game's own pause menu.
 - Discord status: on by default; switch it in the `F8` menu (stored in `BepInEx\config\coop-anything.cloverpit-coop.cfg`).
 - Everyone should either own the DLC or not; the mod warns when it is mixed.
 
@@ -75,13 +80,15 @@ The mod includes bots that play the game without a human, used to check sync wit
 
 These expect test copies of the game in `../test-installs/` (not part of this repo).
 
-Last full test (v0.4.0): 110 actions over four rounds including paying the debt and the deadline cutscene, 77 state comparisons, 0 desyncs.
+Last full test (v0.4.0): 110 actions over four rounds including paying the debt and the deadline cutscene, 77 state comparisons, 0 desyncs. Later versions were not run through these tests; 0.7.x is only compiled so far.
 
 ## Known issues
 
 - Numbers can jump briefly while a correction is applied.
 - Auto-spin is not yet limited to the player at the machine.
-- Connection drops are barely tested.
+- Reconnecting, the surgery machine, the red button and the main menu are new and not tested in the game yet.
+- A player without the DLC has no surgery machine, and a mixed group goes out of sync.
+- If the host crashes, friends may see "reconnecting" for up to 2.5 minutes before they land in the main menu.
 - If the mod waits for something on your side (an open dialogue), a notice shows; close it and play continues.
 
 ## Reporting bugs

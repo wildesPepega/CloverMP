@@ -163,6 +163,26 @@ internal sealed class TcpLink : ILink
     {
     }
 
+    // The test link has no reconnecting.
+    public bool TryInterrupted(out int player)
+    {
+        player = -1;
+        return false;
+    }
+
+    public bool TryRejoined(out int player)
+    {
+        player = -1;
+        return false;
+    }
+
+    public bool TryReconnected() => false;
+
+    public void SendVolatile(string line)
+    {
+        Send(line);
+    }
+
     public void Dispose()
     {
         _closed = true;
